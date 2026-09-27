@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WebSockets/WebSockets.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WebSockets.Tests/WebSockets.Tests.csproj" />
+  </Folder>
+</Solution>
