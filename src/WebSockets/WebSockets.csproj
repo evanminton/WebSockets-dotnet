@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PackageId>WebSockets</PackageId>
+    <Description>A .NET implementation of the WHATWG WebSockets Standard (the browser WebSocket API) on top of System.Net.WebSockets.</Description>
+    <PackageTags>websocket;websockets;whatwg;rfc6455</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="WebSockets.Tests" />
+  </ItemGroup>
+
+</Project>
