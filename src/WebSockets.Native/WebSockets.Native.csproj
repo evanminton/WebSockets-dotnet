@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The WebSockets library as a native C library (NativeAOT): no .NET runtime needed on the target.
+      dotnet publish src/WebSockets.Native -c Release -r win-x64 -p:NativeLib=Shared   → WebSocketsNative.dll + .lib (import)
+      dotnet publish src/WebSockets.Native -c Release -r win-x64 -p:NativeLib=Static   → WebSocketsNative.lib (static)
+    The C API is include/websockets.h. NativeAOT compiles for the OS it runs on (win-* on Windows, linux-* on Linux,
+    osx-* on macOS). build-native.cmd at the repository root builds both kinds and runs the C demo against them.
+    The output is not minified: exception messages are kept (UseSystemResourceKeys=false), stack trace data and
+    symbols are kept (.pdb next to the library on Windows, unstripped .so/.dylib elsewhere).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>WebSocketsNative</AssemblyName>
+    <RootNamespace>WebSockets.Native</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <NativeLib Condition="'$(NativeLib)' == ''">Shared</NativeLib>
+    <UseSystemResourceKeys>false</UseSystemResourceKeys>
+    <IlcGenerateStackTraceData>true</IlcGenerateStackTraceData>
+    <StripSymbols>false</StripSymbols>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../WebSockets/WebSockets.csproj" />
+  </ItemGroup>
+
+  <!-- After the native link, record what a static-library consumer has to link as well (the NativeAOT runtime
+       libraries and system libraries). build-native.cmd copies them next to the static library. -->
+  <Target Name="WriteNativeLinkInputs" AfterTargets="LinkNative" Condition="'$(NativeLib)' == 'Shared'">
+    <WriteLinesToFile File="$(NativeOutputPath)native-libs.txt" Lines="@(NativeLibrary)" Overwrite="true" />
+    <WriteLinesToFile File="$(NativeOutputPath)system-libs.txt" Lines="@(NativeSystemLibrary)" Overwrite="true" />
+    <WriteLinesToFile File="$(NativeOutputPath)linker-args.txt" Lines="@(LinkerArg)" Overwrite="true" />
+    <!-- WriteLinesToFile deletes the file when the list is empty, hence the Exists checks. -->
+    <Copy SourceFiles="$(NativeOutputPath)native-libs.txt" DestinationFolder="$(PublishDir)" Condition="Exists('$(NativeOutputPath)native-libs.txt')" />
+    <Copy SourceFiles="$(NativeOutputPath)system-libs.txt" DestinationFolder="$(PublishDir)" Condition="Exists('$(NativeOutputPath)system-libs.txt')" />
+    <Copy SourceFiles="$(NativeOutputPath)linker-args.txt" DestinationFolder="$(PublishDir)" Condition="Exists('$(NativeOutputPath)linker-args.txt')" />
+  </Target>
+</Project>
