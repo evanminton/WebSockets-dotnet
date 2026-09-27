@@ -142,10 +142,18 @@ internal static class Handshake
                         deflate.ServerContextTakeover = false;
                         break;
                     case "client_max_window_bits":
-                        deflate.ClientMaxWindowBits = WindowBits(value);
+                        int clientBits = WindowBits(value);
+                        if (clientBits < 9)
+                        {
+                            // This limits our compressor, and zlib cannot compress with an 8-bit window.
+                            throw new WebSocketException("The server limited the client to an 8-bit deflate window, which is not supported.");
+                        }
+
+                        deflate.ClientMaxWindowBits = clientBits;
                         break;
                     case "server_max_window_bits":
-                        deflate.ServerMaxWindowBits = WindowBits(value);
+                        // Only our decompressor uses this, and a 9-bit window can inflate data compressed with an 8-bit one.
+                        deflate.ServerMaxWindowBits = Math.Max(WindowBits(value), 9);
                         break;
                     default:
                         throw new WebSocketException($"The permessage-deflate parameter '{parameter}' is not valid.");
@@ -156,7 +164,7 @@ internal static class Handshake
         return deflate;
     }
 
-    // RFC 7692 allows 8 to 15; zlib (and so .NET) cannot produce 8-bit windows, so 8 is widened to 9 as zlib itself does.
+    // RFC 7692 allows 8 to 15; zlib (and so .NET) cannot use 8-bit windows, which callers handle per direction.
     private static int WindowBits(string? value)
     {
         if (value is null || !int.TryParse(value, out int bits) || bits < 8 || bits > 15)
@@ -164,7 +172,7 @@ internal static class Handshake
             throw new WebSocketException($"The permessage-deflate window size '{value}' is not valid.");
         }
 
-        return Math.Max(bits, 9);
+        return bits;
     }
 
     private static IEnumerable<string> SplitList(string value, char separator) =>

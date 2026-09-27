@@ -162,7 +162,8 @@ public sealed class WebSocket : IDisposable, IAsyncDisposable
                 return;
             }
 
-            if (!_established)
+            // Still CONNECTING until the open task runs, even once the handshake has finished, so fail rather than close.
+            if (_readyState == (int)WebSocketReadyState.Connecting)
             {
                 _failRequested = true;
                 fail = true;
@@ -270,7 +271,7 @@ public sealed class WebSocket : IDisposable, IAsyncDisposable
         lock (_gate)
         {
             long buffered = Interlocked.Add(ref _bufferedAmount, data.Length);
-            if (_established && !_closingHandshakeStarted && _connectionClosed == 0)
+            if (_established && !_failRequested && !_closingHandshakeStarted && _connectionClosed == 0)
             {
                 if (buffered > _options.MaxBufferedAmount)
                 {
@@ -323,7 +324,13 @@ public sealed class WebSocket : IDisposable, IAsyncDisposable
 
         _loop.Queue(() =>
         {
-            Interlocked.CompareExchange(ref _readyState, (int)WebSocketReadyState.Open, (int)WebSocketReadyState.Connecting);
+            // Close() failed the connection after the handshake but before this task ran; its error and close events follow.
+            if (Interlocked.CompareExchange(ref _readyState, (int)WebSocketReadyState.Open, (int)WebSocketReadyState.Connecting)
+                != (int)WebSocketReadyState.Connecting)
+            {
+                return;
+            }
+
             Volatile.Write(ref _extensions, extensions);
             Volatile.Write(ref _protocol, protocol);
             OnOpen?.Invoke(this, EventArgs.Empty);
