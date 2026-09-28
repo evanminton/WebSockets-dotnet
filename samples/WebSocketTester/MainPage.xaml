@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:WebSocketTester"
+             x:Class="WebSocketTester.MainPage"
+             x:DataType="local:MainPage">
+
+    <Grid Padding="16" RowSpacing="12" RowDefinitions="Auto,Auto,Auto,Auto,*">
+
+        <!-- Connection -->
+        <Border Grid.Row="0" Padding="12" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+            <Grid ColumnSpacing="8" RowSpacing="8" ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
+                <Label Text="URL" VerticalOptions="Center" />
+                <Entry Grid.Column="1" x:Name="UrlEntry" AutomationId="UrlEntry" Text="ws://127.0.0.1:8765/echo" Placeholder="ws://host:port/path" />
+                <Button Grid.Column="2" x:Name="ConnectButton" AutomationId="ConnectButton" Text="Connect" Clicked="OnConnectClicked" />
+                <Button Grid.Column="3" x:Name="DropButton" AutomationId="DropButton" Text="Drop" Clicked="OnDropClicked"
+                        ToolTipProperties.Text="Dispose the WebSocket: drop the connection without a closing handshake" />
+
+                <Label Grid.Row="1" Text="Subprotocols" VerticalOptions="Center" />
+                <Entry Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ProtocolsEntry" AutomationId="ProtocolsEntry"
+                       Placeholder="Optional, comma or space separated, in order of preference (e.g. chat, superchat)" />
+            </Grid>
+        </Border>
+
+        <!-- State -->
+        <Grid Grid.Row="1" ColumnSpacing="24" ColumnDefinitions="Auto,Auto,Auto,*">
+            <Label x:Name="ReadyStateLabel" AutomationId="ReadyStateLabel" Text="readyState: —" FontAttributes="Bold" />
+            <Label Grid.Column="1" x:Name="BufferedAmountLabel" AutomationId="BufferedAmountLabel" Text="bufferedAmount: 0" />
+            <Label Grid.Column="2" x:Name="ProtocolLabel" AutomationId="ProtocolLabel" Text="protocol: —" />
+            <Label Grid.Column="3" x:Name="ExtensionsLabel" AutomationId="ExtensionsLabel" Text="extensions: —" LineBreakMode="TailTruncation" />
+        </Grid>
+
+        <!-- Send -->
+        <Border Grid.Row="2" Padding="12" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+            <Grid ColumnSpacing="8" RowSpacing="8" ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto">
+                <Editor Grid.RowSpan="2" x:Name="MessageEditor" AutomationId="MessageEditor" HeightRequest="80" AutoSize="Disabled"
+                        Placeholder="Message. In hex mode: bytes such as 48 65 6c 6c 6f or 48656c6c6f" />
+                <Picker Grid.Column="1" x:Name="SendModePicker" AutomationId="SendModePicker" Title="Send as" WidthRequest="180" />
+                <Button Grid.Column="2" x:Name="SendButton" AutomationId="SendButton" Text="Send" Clicked="OnSendClicked" WidthRequest="100" />
+                <Picker Grid.Row="1" Grid.Column="1" x:Name="BinaryTypePicker" AutomationId="BinaryTypePicker" Title="binaryType" WidthRequest="180"
+                        SelectedIndexChanged="OnBinaryTypeChanged" />
+            </Grid>
+        </Border>
+
+        <!-- Close -->
+        <Border Grid.Row="3" Padding="12" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+            <Grid ColumnSpacing="8" ColumnDefinitions="Auto,100,Auto,*,Auto">
+                <Label Text="Code" VerticalOptions="Center" />
+                <Entry Grid.Column="1" x:Name="CloseCodeEntry" AutomationId="CloseCodeEntry" Placeholder="none" Keyboard="Numeric" />
+                <Label Grid.Column="2" Text="Reason" VerticalOptions="Center" />
+                <Entry Grid.Column="3" x:Name="CloseReasonEntry" AutomationId="CloseReasonEntry" Placeholder="Optional, at most 123 bytes of UTF-8; needs a code" />
+                <Button Grid.Column="4" x:Name="CloseButton" AutomationId="CloseButton" Text="Close" Clicked="OnCloseClicked" WidthRequest="100" />
+            </Grid>
+        </Border>
+
+        <!-- Log -->
+        <Grid Grid.Row="4" RowSpacing="6" RowDefinitions="Auto,*">
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Text="Log" FontAttributes="Bold" VerticalOptions="Center" />
+                <Button Grid.Column="1" Text="Clear" AutomationId="ClearButton" Clicked="OnClearClicked" />
+            </Grid>
+            <Border Grid.Row="1" Padding="8" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+                <CollectionView x:Name="LogView" AutomationId="LogView" ItemsSource="{Binding Log}" ItemsUpdatingScrollMode="KeepLastItemInView">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="local:LogEntry">
+                            <Grid ColumnSpacing="10" Padding="0,2" ColumnDefinitions="110,80,*">
+                                <Label Text="{Binding Time}" FontFamily="Consolas" TextColor="{StaticResource Gray500}" />
+                                <Label Grid.Column="1" Text="{Binding Kind}" FontFamily="Consolas" FontAttributes="Bold" TextColor="{Binding Color}" />
+                                <Label Grid.Column="2" Text="{Binding Text}" FontFamily="Consolas" LineBreakMode="WordWrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </Border>
+        </Grid>
+    </Grid>
+
+</ContentPage>
