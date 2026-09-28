@@ -42,6 +42,7 @@ public sealed class WebSocket : IDisposable, IAsyncDisposable
     private volatile BinaryType _binaryType = BinaryType.Blob;
     private string _extensions = "";
     private string _protocol = "";
+    private WebSocketMessageFlags _sendFlags = WebSocketMessageFlags.EndOfMessage;
 
     // Connection state, guarded by _gate.
     private bool _established;
@@ -312,6 +313,11 @@ public sealed class WebSocket : IDisposable, IAsyncDisposable
         {
             _socket = handshake.Socket;
             _stream = handshake.Stream;
+            if (!handshake.CompressOutgoing)
+            {
+                _sendFlags |= WebSocketMessageFlags.DisableCompression;
+            }
+
             if (_failRequested || _connectionClosed != 0)
             {
                 _socket.Dispose();
@@ -324,11 +330,16 @@ public sealed class WebSocket : IDisposable, IAsyncDisposable
 
         _loop.Queue(() =>
         {
-            // Close() failed the connection after the handshake but before this task ran; its error and close events follow.
-            if (Interlocked.CompareExchange(ref _readyState, (int)WebSocketReadyState.Open, (int)WebSocketReadyState.Connecting)
-                != (int)WebSocketReadyState.Connecting)
+            // Under _gate so Close() sees either CONNECTING (and fails) or OPEN (and closes cleanly), never both.
+            lock (_gate)
             {
-                return;
+                // Close() failed the connection after the handshake but before this task ran; its error and close events follow.
+                if (_readyState != (int)WebSocketReadyState.Connecting)
+                {
+                    return;
+                }
+
+                _readyState = (int)WebSocketReadyState.Open;
             }
 
             Volatile.Write(ref _extensions, extensions);
@@ -348,7 +359,7 @@ public sealed class WebSocket : IDisposable, IAsyncDisposable
             {
                 if (!item.IsClose)
                 {
-                    await _socket!.SendAsync(item.Data, item.Type, endOfMessage: true, _cts.Token).ConfigureAwait(false);
+                    await _socket!.SendAsync(item.Data, item.Type, _sendFlags, _cts.Token).ConfigureAwait(false);
                     Interlocked.Add(ref _bufferedAmount, -item.Data.Length);
                     continue;
                 }

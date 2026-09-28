@@ -134,7 +134,6 @@ public class ProtocolTests
     [InlineData("unoffered-extension")]
     [InlineData("bad-deflate-parameter")]
     [InlineData("missing-upgrade")]
-    [InlineData("client-8-bit-window")]
     public async Task Invalid_handshake_responses_fail_the_connection(string kind)
     {
         using var server = new RawServer(
@@ -144,7 +143,6 @@ public class ProtocolTests
                 "unrequested-protocol" => RawServer.Accept(r, "Sec-WebSocket-Protocol: other"),
                 "unoffered-extension" => RawServer.Accept(r, "Sec-WebSocket-Extensions: x-custom"),
                 "bad-deflate-parameter" => RawServer.Accept(r, "Sec-WebSocket-Extensions: permessage-deflate; server_max_window_bits=20"),
-                "client-8-bit-window" => RawServer.Accept(r, "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=8"),
                 _ => RawServer.Accept(r).Replace("Upgrade: websocket\r\n", ""),
             },
             c => Task.Delay(1000));
@@ -170,6 +168,25 @@ public class ProtocolTests
         await log.Opened;
 
         Assert.Equal("permessage-deflate; server_no_context_takeover; client_max_window_bits=10", socket.Extensions);
+        socket.Dispose();
+    }
+
+    [Fact]
+    public async Task Client_8_bit_window_is_accepted_and_messages_are_sent_uncompressed()
+    {
+        (int Opcode, byte[] Payload) received = default;
+        using var server = new RawServer(
+            r => RawServer.Accept(r, "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=8"),
+            async c => received = await c.ReadFrameAsync());
+        var socket = new WebSocket(server.Url);
+        var log = new EventLog(socket);
+        await log.Opened;
+
+        socket.Send("hello hello hello hello");
+        await server.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(0x1, received.Opcode);
+        Assert.Equal("hello hello hello hello"u8.ToArray(), received.Payload);
         socket.Dispose();
     }
 

@@ -10,7 +10,8 @@ internal sealed record HandshakeResult(
     System.Net.WebSockets.WebSocket Socket,
     ConnectionStream Stream,
     string Protocol,
-    string Extensions);
+    string Extensions,
+    bool CompressOutgoing);
 
 /// <summary>
 /// The opening handshake: "establish a WebSocket connection" from the standard, with the response checks of
@@ -89,7 +90,7 @@ internal static class Handshake
             }
 
             string extensions = Header(response, "Sec-WebSocket-Extensions") ?? "";
-            WebSocketDeflateOptions? deflate = ParseExtensions(extensions, options.PerMessageDeflate);
+            WebSocketDeflateOptions? deflate = ParseExtensions(extensions, options.PerMessageDeflate, out bool compressOutgoing);
 
             Stream raw = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var stream = new ConnectionStream(raw);
@@ -100,7 +101,7 @@ internal static class Handshake
                 KeepAliveInterval = options.KeepAliveInterval,
                 DangerousDeflateOptions = deflate,
             });
-            return new HandshakeResult(socket, stream, protocol ?? "", extensions);
+            return new HandshakeResult(socket, stream, protocol ?? "", extensions, compressOutgoing);
         }
         catch
         {
@@ -109,9 +110,13 @@ internal static class Handshake
         }
     }
 
-    /// <summary>Validates the server's extension list and turns an accepted permessage-deflate into deflate options.</summary>
-    internal static WebSocketDeflateOptions? ParseExtensions(string header, bool offered)
+    /// <summary>
+    /// Validates the server's extension list and turns an accepted permessage-deflate into deflate options.
+    /// <paramref name="compressOutgoing"/> is false when the server's limits leave us unable to compress what we send.
+    /// </summary>
+    internal static WebSocketDeflateOptions? ParseExtensions(string header, bool offered, out bool compressOutgoing)
     {
+        compressOutgoing = true;
         WebSocketDeflateOptions? deflate = null;
         foreach (string extension in SplitList(header, ','))
         {
@@ -142,14 +147,11 @@ internal static class Handshake
                         deflate.ServerContextTakeover = false;
                         break;
                     case "client_max_window_bits":
+                        // Our offer allows any size from 8 to 15, but zlib cannot compress with an 8-bit window.
+                        // permessage-deflate lets a sender leave any message uncompressed, so for 8 we never compress.
                         int clientBits = WindowBits(value);
-                        if (clientBits < 9)
-                        {
-                            // This limits our compressor, and zlib cannot compress with an 8-bit window.
-                            throw new WebSocketException("The server limited the client to an 8-bit deflate window, which is not supported.");
-                        }
-
-                        deflate.ClientMaxWindowBits = clientBits;
+                        compressOutgoing = clientBits >= 9;
+                        deflate.ClientMaxWindowBits = Math.Max(clientBits, 9);
                         break;
                     case "server_max_window_bits":
                         // Only our decompressor uses this, and a 9-bit window can inflate data compressed with an 8-bit one.
