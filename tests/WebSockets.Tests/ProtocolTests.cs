@@ -220,10 +220,9 @@ public class ProtocolTests
         socket.Close(1000);
         Assert.Equal(WebSocketReadyState.Closing, socket.ReadyState);
         open();
-        while (!closed.IsCompleted)
-        {
-            (await context.NextPostAsync())();
-        }
+
+        // Failing queues exactly one more task, which dispatches error and close.
+        (await context.NextPostAsync())();
 
         CloseEventArgs close = await closed;
         Assert.False(close.WasClean);
