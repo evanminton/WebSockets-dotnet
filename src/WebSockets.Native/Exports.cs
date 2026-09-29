@@ -219,8 +219,12 @@ internal static unsafe class Exports
     {
         try
         {
-            // SocketsHttpHandler rejects a zero connect timeout, which would otherwise fail every later ws_socket_create.
-            if (milliseconds == 0) throw new ArgumentOutOfRangeException(nameof(milliseconds), "The connect timeout must be positive or -1.");
+            // SocketsHttpHandler rejects zero and anything over int.MaxValue ms, which would otherwise fail every later ws_socket_create.
+            if (milliseconds == 0 || milliseconds > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(milliseconds), $"The connect timeout must be -1 or from 1 to {int.MaxValue}.");
+            }
+
             Options(options).ConnectTimeout = Milliseconds(milliseconds, allowInfinite: true);
             return 0;
         }
