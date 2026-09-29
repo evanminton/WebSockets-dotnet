@@ -45,7 +45,7 @@ internal sealed class NativeOptions
             MaxBufferedAmount = MaxBufferedAmount,
             CloseTimeout = CloseTimeout,
             KeepAliveInterval = KeepAliveInterval,
-            SynchronizationContext = (SynchronizationContext?)Dispatcher ?? fallbackContext,
+            SynchronizationContext = fallbackContext ?? Dispatcher,
             EventHandlerException = ex => System.Diagnostics.Trace.TraceError("Unhandled exception in a WebSocket callback: {0}", ex),
         };
         foreach (var (name, value) in RequestHeaders)

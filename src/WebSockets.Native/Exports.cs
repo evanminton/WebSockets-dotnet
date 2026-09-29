@@ -217,7 +217,13 @@ internal static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "ws_options_set_connect_timeout")]
     public static int OptionsSetConnectTimeout(void* options, long milliseconds)
     {
-        try { Options(options).ConnectTimeout = Milliseconds(milliseconds, allowInfinite: true); return 0; }
+        try
+        {
+            // SocketsHttpHandler rejects a zero connect timeout, which would otherwise fail every later ws_socket_create.
+            if (milliseconds == 0) throw new ArgumentOutOfRangeException(nameof(milliseconds), "The connect timeout must be positive or -1.");
+            Options(options).ConnectTimeout = Milliseconds(milliseconds, allowInfinite: true);
+            return 0;
+        }
         catch (Exception ex) { return Fail(ex); }
     }
 
@@ -292,12 +298,12 @@ internal static unsafe class Exports
             }
 
             NativeOptions settings = options == null ? new NativeOptions() : Options(options);
-            GatedContext? gate = settings.Dispatcher is null ? new GatedContext() : null;
+            var gate = new GatedContext(settings.Dispatcher);
             var socket = new WebSocket(Need(url, nameof(url)), list, settings.Build(gate));
             var native = new NativeSocket(socket, callbacks == null ? default : *callbacks);
             nint handle = NewHandle(native);
             native.Handle = handle;
-            gate?.Release();
+            gate.Release();
             return (void*)handle;
         }
         catch (Exception ex) { return FailNull<byte>(ex); }

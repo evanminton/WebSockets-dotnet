@@ -50,10 +50,11 @@ internal sealed class NativeDispatcher : SynchronizationContext
 }
 
 /// <summary>
-/// Runs posts on the thread pool, but only once <see cref="Release"/> is called. Sockets created without a dispatcher use
-/// it so no event can be dispatched before ws_socket_create has attached the callbacks.
+/// Holds posts until <see cref="Release"/> is called, then forwards them to the dispatcher, or to the thread pool when there
+/// is none. Every socket uses it, so no event can be dispatched before ws_socket_create has attached the callbacks, even
+/// while ws_dispatcher_run is already running on another thread.
 /// </summary>
-internal sealed class GatedContext : SynchronizationContext
+internal sealed class GatedContext(SynchronizationContext? inner) : SynchronizationContext
 {
     private readonly Lock _gate = new();
     private List<(SendOrPostCallback Callback, object? State)>? _pending = [];
@@ -69,7 +70,7 @@ internal sealed class GatedContext : SynchronizationContext
             }
         }
 
-        ThreadPool.UnsafeQueueUserWorkItem(s => d(s), state, preferLocal: false);
+        Forward(d, state);
     }
 
     public override SynchronizationContext CreateCopy() => this;
@@ -85,7 +86,19 @@ internal sealed class GatedContext : SynchronizationContext
 
         foreach (var (callback, state) in pending)
         {
-            ThreadPool.UnsafeQueueUserWorkItem(s => callback(s), state, preferLocal: false);
+            Forward(callback, state);
+        }
+    }
+
+    private void Forward(SendOrPostCallback d, object? state)
+    {
+        if (inner is not null)
+        {
+            inner.Post(d, state);
+        }
+        else
+        {
+            ThreadPool.UnsafeQueueUserWorkItem(s => d(s), state, preferLocal: false);
         }
     }
 }
