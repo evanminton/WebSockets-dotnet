@@ -1,6 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/WebSockets/WebSockets.csproj" />
+    <Project Path="src/WebSockets.Native/WebSockets.Native.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/EchoServer/EchoServer.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WebSockets.Tests/WebSockets.Tests.csproj" />

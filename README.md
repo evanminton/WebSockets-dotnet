@@ -77,6 +77,13 @@ socket.Close(1000, "done");
 
 Framing, masking, fragmentation, UTF-8 validation, ping/pong and permessage-deflate come from `System.Net.WebSockets.WebSocket.CreateFromStream`. The library does the opening handshake itself, and wraps the connection stream to send and recognize Close frames without a status code, which `System.Net.WebSockets` cannot do (it writes 1005 on the wire, which RFC 6455 forbids, and reports an empty Close frame as 1000).
 
+## Native C library
+
+`src/WebSockets.Native` compiles the library with NativeAOT into a shared (`.dll`/`.so`/`.dylib`) or static
+(`.lib`/`.a`) C library that needs no .NET runtime, with the whole API in
+[`include/websockets.h`](src/WebSockets.Native/include/websockets.h). On Windows, `build-native.cmd` builds both kinds
+and checks them from C with `samples/native/ws_demo.c`. See [NATIVE.md](src/WebSockets.Native/NATIVE.md).
+
 ## Building and testing
 
 ```sh
