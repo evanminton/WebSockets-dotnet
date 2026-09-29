@@ -62,13 +62,21 @@ internal sealed class EventLoop
         }
         catch (Exception ex)
         {
-            if (_onException is not null)
+            if (_onException is null)
+            {
+                Trace.TraceError("Unhandled exception in a WebSocket event handler: {0}", ex);
+                return;
+            }
+
+            // A throwing callback must not stop the loop or escape into the synchronization context.
+            try
             {
                 _onException(ex);
             }
-            else
+            catch (Exception callbackEx)
             {
                 Trace.TraceError("Unhandled exception in a WebSocket event handler: {0}", ex);
+                Trace.TraceError("Unhandled exception in the EventHandlerException callback: {0}", callbackEx);
             }
         }
     }

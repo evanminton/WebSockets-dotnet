@@ -1,3 +1,5 @@
+using System.Threading.Channels;
+
 namespace WebSockets.Tests;
 
 /// <summary>Wire-level behavior checked against a hand-rolled server.</summary>
@@ -170,6 +172,91 @@ public class ProtocolTests
     }
 
     [Fact]
+    public async Task Client_8_bit_window_is_accepted_and_messages_are_sent_uncompressed()
+    {
+        (int Opcode, byte[] Payload) received = default;
+        using var server = new RawServer(
+            r => RawServer.Accept(r, "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=8"),
+            async c => received = await c.ReadFrameAsync());
+        var socket = new WebSocket(server.Url);
+        var log = new EventLog(socket);
+        await log.Opened;
+
+        socket.Send("hello hello hello hello");
+        await server.Completion.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(0x1, received.Opcode);
+        Assert.Equal("hello hello hello hello"u8.ToArray(), received.Payload);
+        socket.Dispose();
+    }
+
+    [Fact]
+    public async Task Server_8_bit_window_is_accepted()
+    {
+        using var server = new RawServer(
+            r => RawServer.Accept(r, "Sec-WebSocket-Extensions: permessage-deflate; server_max_window_bits=8"),
+            async c => await c.ReadFrameAsync());
+        var socket = new WebSocket(server.Url);
+        var log = new EventLog(socket);
+
+        await log.Opened;
+
+        Assert.Equal("permessage-deflate; server_max_window_bits=8", socket.Extensions);
+        socket.Dispose();
+    }
+
+    [Fact]
+    public async Task Close_after_the_handshake_but_before_open_is_dispatched_fails_the_connection()
+    {
+        using var server = new RawServer(r => RawServer.Accept(r), c => Task.Delay(1000));
+        var context = new ManualContext();
+        var socket = new WebSocket(server.Url, new WebSocketOptions { SynchronizationContext = context });
+        var log = new EventLog(socket);
+        Task<CloseEventArgs> closed = log.Closed;
+
+        // The open task is posted but has not run, so the WebSocket is still CONNECTING.
+        Action open = await context.NextPostAsync();
+        Assert.Equal(WebSocketReadyState.Connecting, socket.ReadyState);
+        socket.Close(1000);
+        Assert.Equal(WebSocketReadyState.Closing, socket.ReadyState);
+        open();
+
+        // Failing queues exactly one more task, which dispatches error and close.
+        (await context.NextPostAsync())();
+
+        CloseEventArgs close = await closed;
+        Assert.False(close.WasClean);
+        Assert.Equal(1006, close.Code);
+        Assert.Equal(["error:Closed", "close:Closed"], log.Events);
+        Assert.Equal("", socket.Extensions);
+    }
+
+    [Fact]
+    public async Task A_throwing_exception_callback_does_not_stop_later_events()
+    {
+        using var server = new RawServer(r => RawServer.Accept(r), async c =>
+        {
+            await c.SendFrameAsync(0x8, []);
+            await c.ReadFrameAsync();
+        });
+
+        // Constructed off the test's synchronization context, so events run on the WebSocket's own queue.
+        (WebSocket socket, EventLog log) = await Task.Run(() =>
+        {
+            var s = new WebSocket(server.Url, new WebSocketOptions { EventHandlerException = _ => throw new InvalidOperationException("callback") });
+            var l = new EventLog(s);
+            s.OnOpen += (_, _) => throw new InvalidOperationException("handler");
+            return (s, l);
+        });
+
+        CloseEventArgs close = await log.Closed;
+
+        Assert.True(close.WasClean);
+        Assert.Equal(["open:Open", "close:Closed"], log.Events);
+        socket.Dispose();
+    }
+
+    [Fact]
     public async Task Redirects_fail_the_connection()
     {
         using var server = new RawServer(_ => "HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:1/\r\nContent-Length: 0\r\n\r\n", _ => Task.CompletedTask);
@@ -197,5 +284,19 @@ public class ProtocolTests
         await log.Closed;
 
         Assert.Equal(["open:Open", "message", "close:Closed"], log.Events);
+    }
+
+    /// <summary>Holds posted callbacks until the test runs them.</summary>
+    private sealed class ManualContext : SynchronizationContext
+    {
+        private readonly Channel<Action> _posts = Channel.CreateUnbounded<Action>();
+
+        public override void Post(SendOrPostCallback d, object? state) => _posts.Writer.TryWrite(() => d(state));
+
+        public async Task<Action> NextPostAsync()
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            return await _posts.Reader.ReadAsync(cts.Token);
+        }
     }
 }

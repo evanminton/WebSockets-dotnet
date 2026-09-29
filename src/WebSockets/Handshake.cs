@@ -10,7 +10,8 @@ internal sealed record HandshakeResult(
     System.Net.WebSockets.WebSocket Socket,
     ConnectionStream Stream,
     string Protocol,
-    string Extensions);
+    string Extensions,
+    bool CompressOutgoing);
 
 /// <summary>
 /// The opening handshake: "establish a WebSocket connection" from the standard, with the response checks of
@@ -89,7 +90,7 @@ internal static class Handshake
             }
 
             string extensions = Header(response, "Sec-WebSocket-Extensions") ?? "";
-            WebSocketDeflateOptions? deflate = ParseExtensions(extensions, options.PerMessageDeflate);
+            WebSocketDeflateOptions? deflate = ParseExtensions(extensions, options.PerMessageDeflate, out bool compressOutgoing);
 
             Stream raw = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var stream = new ConnectionStream(raw);
@@ -100,7 +101,7 @@ internal static class Handshake
                 KeepAliveInterval = options.KeepAliveInterval,
                 DangerousDeflateOptions = deflate,
             });
-            return new HandshakeResult(socket, stream, protocol ?? "", extensions);
+            return new HandshakeResult(socket, stream, protocol ?? "", extensions, compressOutgoing);
         }
         catch
         {
@@ -109,9 +110,13 @@ internal static class Handshake
         }
     }
 
-    /// <summary>Validates the server's extension list and turns an accepted permessage-deflate into deflate options.</summary>
-    internal static WebSocketDeflateOptions? ParseExtensions(string header, bool offered)
+    /// <summary>
+    /// Validates the server's extension list and turns an accepted permessage-deflate into deflate options.
+    /// <paramref name="compressOutgoing"/> is false when the server's limits leave us unable to compress what we send.
+    /// </summary>
+    internal static WebSocketDeflateOptions? ParseExtensions(string header, bool offered, out bool compressOutgoing)
     {
+        compressOutgoing = true;
         WebSocketDeflateOptions? deflate = null;
         foreach (string extension in SplitList(header, ','))
         {
@@ -142,10 +147,15 @@ internal static class Handshake
                         deflate.ServerContextTakeover = false;
                         break;
                     case "client_max_window_bits":
-                        deflate.ClientMaxWindowBits = WindowBits(value);
+                        // Our offer allows any size from 8 to 15, but zlib cannot compress with an 8-bit window.
+                        // permessage-deflate lets a sender leave any message uncompressed, so for 8 we never compress.
+                        int clientBits = WindowBits(value);
+                        compressOutgoing = clientBits >= 9;
+                        deflate.ClientMaxWindowBits = Math.Max(clientBits, 9);
                         break;
                     case "server_max_window_bits":
-                        deflate.ServerMaxWindowBits = WindowBits(value);
+                        // Only our decompressor uses this, and a 9-bit window can inflate data compressed with an 8-bit one.
+                        deflate.ServerMaxWindowBits = Math.Max(WindowBits(value), 9);
                         break;
                     default:
                         throw new WebSocketException($"The permessage-deflate parameter '{parameter}' is not valid.");
@@ -156,7 +166,7 @@ internal static class Handshake
         return deflate;
     }
 
-    // RFC 7692 allows 8 to 15; zlib (and so .NET) cannot produce 8-bit windows, so 8 is widened to 9 as zlib itself does.
+    // RFC 7692 allows 8 to 15; zlib (and so .NET) cannot use 8-bit windows, which callers handle per direction.
     private static int WindowBits(string? value)
     {
         if (value is null || !int.TryParse(value, out int bits) || bits < 8 || bits > 15)
@@ -164,7 +174,7 @@ internal static class Handshake
             throw new WebSocketException($"The permessage-deflate window size '{value}' is not valid.");
         }
 
-        return Math.Max(bits, 9);
+        return bits;
     }
 
     private static IEnumerable<string> SplitList(string value, char separator) =>
