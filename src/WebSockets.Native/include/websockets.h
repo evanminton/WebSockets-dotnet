@@ -172,7 +172,7 @@ WS_API int WS_CALL ws_options_set_dispatcher(ws_options* options, ws_dispatcher*
 /* The connection's HTTP handler (ConfigureHandler in .NET). */
 /* Proxy: NULL uses the system proxy (the default), "" connects directly, otherwise a proxy URL such as "http://proxy:8080". */
 WS_API int WS_CALL ws_options_set_proxy(ws_options* options, const char* proxy_url);
-/* TCP/TLS connect timeout. Default -1 (none); 0 is rejected. */
+/* TCP/TLS connect timeout. Default -1 (none); otherwise 1 to INT32_MAX. */
 WS_API int WS_CALL ws_options_set_connect_timeout(ws_options* options, int64_t milliseconds);
 /* Accept any server certificate. For development only. Default 0. */
 WS_API int WS_CALL ws_options_set_accept_any_certificate(ws_options* options, int enabled);
