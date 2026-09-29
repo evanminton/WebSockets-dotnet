@@ -161,9 +161,13 @@ public partial class MainPage : ContentPage
 			code = parsed;
 		}
 
-		// As in the browser API, a reason is only sent together with a code.
-		string? reasonArg = code is null || reason.Length == 0 ? null : reason;
-		string call = code is null ? "close()" : reasonArg is null ? $"close({code})" : $"close({code}, \"{reasonArg}\")";
+		// Pass the reason even without a code, so the library validates it as the browser API does; it is only sent
+		// on the wire together with a code.
+		string? reasonArg = reason.Length == 0 ? null : reason;
+		string codeArg = code is null ? "undefined" : code.Value.ToString(CultureInfo.InvariantCulture);
+		string call = reasonArg is null
+			? code is null ? "close()" : $"close({codeArg})"
+			: $"close({codeArg}, \"{reasonArg}\")";
 		try
 		{
 			_socket.Close(code, reasonArg);
